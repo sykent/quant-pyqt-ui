@@ -1,0 +1,8 @@
+.pytest_cache
+.idea
+/csvfile/config.csv
+/csvfile/industry_board.csv
+/csvfile/market_index.csv
+/csvfile/pool_config.csv
+
+
