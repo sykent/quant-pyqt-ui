@@ -1,5 +1,6 @@
 import os
 import re
+import threading
 
 import pandas as pd
 import qdarkstyle
@@ -7,6 +8,8 @@ from PyQt5.QtCore import Qt, QEvent, QSortFilterProxyModel, pyqtSignal
 from PyQt5.QtGui import QCursor
 from PyQt5.QtWidgets import QApplication, QMainWindow, QComboBox, QCompleter, QVBoxLayout, QWidget, QSizePolicy
 from pypinyin import pinyin, Style
+
+from core.AppThreadExecutor import AppThreadExecutor
 
 
 class SearchBar(QMainWindow):
@@ -26,6 +29,7 @@ class SearchBar(QMainWindow):
         self.parent = parent
         self._init_view()
         self._init_listener()
+        self._init_data()
 
     def _init_view(self):
         """
@@ -65,6 +69,48 @@ class SearchBar(QMainWindow):
         监听事件
         """
         self.select_item_signal.connect(self._on_select_item)
+
+    def _init_data(self):
+        executor = AppThreadExecutor()
+        executor.submit(self.__get_data_task, self.__get_data_callback)
+
+    def __get_data_task(self):
+        """
+        子线程执行键盘小精灵的数据初始化
+        获取数据任务,耗时操作，获取股票，板块，指数的数据
+        """
+        print('异步任务获取搜索数据', '当前线程: ', threading.currentThread().name)
+        # 获取网络股票代码和股票名
+        # stock_df = ak.stock_info_a_code_name()
+        # 获取该类所处的目录,
+        stock_df = pd.read_csv(rf'{os.path.dirname(__file__)}\stock.csv', dtype={
+            'code': str, 'name': str}, index_col=0)
+        # 转为list
+        stock_list = stock_df.values.tolist()
+        stock_list = [(stock[0], stock[1], '股票') for stock in stock_list]
+
+        # 板块数据
+        industry_df = pd.read_csv(rf'{os.path.dirname(__file__)}\industry.csv', dtype={
+            'code': str, 'name': str}, index_col=0)
+        # 转为list
+        industry_list = industry_df.values.tolist()
+        industry_list = [(industry[0], industry[1], '板块') for industry in industry_list]
+
+        # 指数数据
+        market_df = pd.read_csv(rf'{os.path.dirname(__file__)}\market.csv', dtype={
+            'code': str, 'name': str}, index_col=0)
+        # 转为list
+        market_list = market_df.values.tolist()
+        market_list = [(market[0], market[1], '指数') for market in market_list]
+
+        # 合并数据
+        data = stock_list + industry_list + market_list
+        return data
+
+    def __get_data_callback(self, future):
+        print('异步任务成功', '当前线程: ', threading.currentThread().name)
+        data = future.result()
+        self.set_data(data)
 
     def set_data(self, data: list):
         """
@@ -342,11 +388,6 @@ class MainWin(QMainWindow):
 
         # 在主题窗口初始化搜索栏
         self.search_bar = SearchBar(self)
-        stock_data = self._stock_data()
-        industry_data = self._industry_data()
-        market_data = self._market_data()
-        data = stock_data + industry_data + market_data
-        self.search_bar.set_data(data)
 
     def keyPressEvent(self, e):
         """
@@ -369,44 +410,6 @@ class MainWin(QMainWindow):
         if not self.search_bar.isVisible():
             self.search_bar.set_text(text.strip())
             self.search_bar.show()
-
-    def _stock_data(self) -> list:
-        """
-        获取股票数据，工程请用数据库或本地数据
-        """
-        # 获取网络股票代码和股票名
-        # stock_df = ak.stock_info_a_code_name()
-        # 获取该类所处的目录,
-        stock_df = pd.read_csv(rf'{os.path.dirname(__file__)}\stock.csv', dtype={
-            'code': str, 'name': str}, index_col=0)
-        # 转为list
-        stock_list = stock_df.values.tolist()
-        stock_list = [(stock[0], stock[1], '股票') for stock in stock_list]
-        return stock_list
-
-    def _industry_data(self) -> list:
-        """
-        获取板块数据，工程请用数据库或本地数据
-        """
-        # 获取该类所处的目录,
-        industry_df = pd.read_csv(rf'{os.path.dirname(__file__)}\industry.csv', dtype={
-            'code': str, 'name': str}, index_col=0)
-        # 转为list
-        industry_list = industry_df.values.tolist()
-        industry_list = [(industry[0], industry[1], '板块') for industry in industry_list]
-        return industry_list
-
-    def _market_data(self) -> list:
-        """
-        获取指数数据，工程请用数据库或本地数据
-        """
-        # 获取该类所处的目录,
-        market_df = pd.read_csv(rf'{os.path.dirname(__file__)}\market.csv', dtype={
-            'code': str, 'name': str}, index_col=0)
-        # 转为list
-        market_list = market_df.values.tolist()
-        market_list = [(market[0], market[1], '指数') for market in market_list]
-        return market_list
 
     def _init_listener(self):
         # 选择搜索结果后的回调
